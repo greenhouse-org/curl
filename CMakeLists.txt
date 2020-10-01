@@ -39,6 +39,9 @@
 # (From Daniel Stenberg) The gcc command line use neither -g nor any -O options. As a developer, I also treasure our configure scripts's --enable-debug option that sets a long range of "picky" compiler options.
 cmake_minimum_required(VERSION 3.2...3.16 FATAL_ERROR)
 
+# Work around new assumptions of inappropriate /MT flag injection since 3.15
+cmake_policy(SET CMP0091 OLD)
+
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake;${CMAKE_MODULE_PATH}")
 include(Utilities)
 include(Macros)
@@ -247,8 +250,12 @@ endif()
 
 if(CURL_STATIC_CRT)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT")
-  set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd")
+  foreach(lang C CXX)
+    foreach(suffix "" _DEBUG _MINSIZEREL _RELEASE _RELWITHDEBINFO)
+      set(var "CMAKE_${lang}_FLAGS${suffix}")
+      string(REPLACE "/MD" "/MT" ${var} "${${var}}")
+    endforeach()
+  endforeach()
 endif()
 
 # Disable warnings on Borland to avoid changing 3rd party code.
@@ -1440,8 +1447,6 @@ message(STATUS "Enabled SSL backends: ${SSL_BACKENDS}")
 set(CC                      "${CMAKE_C_COMPILER}")
 # TODO probably put a -D... options here?
 set(CONFIGURE_OPTIONS       "")
-# TODO when to set "-DCURL_STATICLIB" for CPPFLAG_CURL_STATICLIB?
-set(CPPFLAG_CURL_STATICLIB  "")
 set(CURLVERSION             "${CURL_VERSION}")
 set(exec_prefix             "\${prefix}")
 set(includedir              "\${prefix}/include")
@@ -1475,10 +1480,13 @@ if(BUILD_SHARED_LIBS)
   set(ENABLE_SHARED         "yes")
   set(ENABLE_STATIC         "no")
   set(LIBCURL_NO_SHARED     "")
+  set(CPPFLAG_CURL_STATICLIB "")
 else()
   set(ENABLE_SHARED         "no")
   set(ENABLE_STATIC         "yes")
   set(LIBCURL_NO_SHARED     "${LIBCURL_LIBS}")
+  set(CPPFLAG_CURL_STATICLIB "-DCURL_STATICLIB")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCURL_STATICLIB")
 endif()
 # "a" (Linux) or "lib" (Windows)
 string(REPLACE "." "" libext "${CMAKE_STATIC_LIBRARY_SUFFIX}")
